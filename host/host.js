@@ -9,6 +9,7 @@ import { Workspace } from './workspace.js';
 import { Runner } from './runner.js';
 import { resolveBackend } from './backends.js';
 import { defaultCloneDir } from './saved.js';
+import { githubAccess, accessMessage, looksLikeAuthError, TOKEN_HELP } from './github.js';
 import { readIndex } from '../lib/share.js';
 import { sharedSessionDir, readEntries } from '../lib/sessions.js';
 import { toDisplayItems } from '../lib/display.js';
@@ -64,11 +65,28 @@ export async function hostRoom(cfg, { log = console.log, onReady } = {}) {
 
   async function welcome(room) {
     if (!workspace) {
+      const onGitHub = !cfg.repoUrl && room.repo;
+      if (onGitHub) {
+        // A private repo needs a personal access token (or git credentials) on this computer. Say so up front.
+        const access = await githubAccess(room.repo, cfg.token);
+        if (!access.ok) throw Object.assign(new Error(accessMessage(access.why, room.repo)), { code: 'needs_token' });
+        if (!cfg.token && access.private === false) {
+          log(`No GitHub token for this room, so pushes use this computer's own git login. If they fail, run the host again with --token.`);
+        }
+      }
       const repoUrl = cfg.repoUrl || (room.repo ? `https://github.com/${room.repo}.git` : '');
-      workspace = new Workspace({ dir: cfg.dir || defaultCloneDir(room.id), repoUrl, token: cfg.token, autoPush: cfg.autoPush !== false });
-      log(`Preparing the room's clone at ${workspace.dir} …`);
-      await workspace.init();
-      await workspace.sync();
+      const ws = new Workspace({ dir: cfg.dir || defaultCloneDir(room.id), repoUrl, token: cfg.token, autoPush: cfg.autoPush !== false });
+      log(`Preparing the room's clone at ${ws.dir} …`);
+      try {
+        await ws.init();
+        await ws.sync();
+      } catch (err) {
+        if (onGitHub && looksLikeAuthError(err.message)) {
+          throw Object.assign(new Error(`GitHub didn't let this computer use ${room.repo}. Run the host again with --token and paste a personal access token. ${TOKEN_HELP}`), { code: 'needs_token' });
+        }
+        throw err;
+      }
+      workspace = ws;
       runner = new Runner({ workspace, send, backend, approvalMode: approvals, maxBudgetUsd: cfg.budget });
     }
     out({ type: 'ready', branch: await workspace.currentBranch(), preview: !!cfg.preview });
@@ -129,7 +147,7 @@ export async function hostRoom(cfg, { log = console.log, onReady } = {}) {
           await welcome(msg.room);
         } catch (err) {
           out({ type: 'fatal', message: err.message });
-          finish('setup_failed', err.message);
+          finish(err.code === 'needs_token' ? 'needs_token' : 'setup_failed', err.message);
         }
         break;
       case 'job':

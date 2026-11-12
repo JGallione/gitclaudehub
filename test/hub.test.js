@@ -44,8 +44,8 @@ function git(...args) {
   return execFileSync('git', ['-c', 'user.name=Seed', '-c', 'user.email=seed@example.invalid', ...args], { encoding: 'utf8' });
 }
 
-function start(args, name) {
-  const p = spawn(process.execPath, args, { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+function start(args, name, extraEnv = {}) {
+  const p = spawn(process.execPath, args, { cwd: ROOT, env: { ...env, ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'] });
   p.output = '';
   p.stdout.on('data', (d) => (p.output += d));
   p.stderr.on('data', (d) => (p.output += d));
@@ -278,4 +278,31 @@ test('rooms: create, host, join, run a turn, moderate, delete', async () => {
   assert.ok(!fs.existsSync(saved), "a deleted room's host settings are forgotten");
   assert.equal((await owner.get(`/api/rooms/${id}/state`)).status, 404);
   assert.ok(fs.existsSync(path.join(clone, 'NOTES.md')), 'the clone is left alone');
+});
+
+test('one site per data folder, and a private repo without a token gets clear instructions', async () => {
+  // The site from the first test is still running on this data folder.
+  const second = start(['server/index.js'], 'second site', { PORT: String(PORT + 10), PREVIEW_PORT: String(PORT + 11) });
+  assert.equal(await second.exited, 1);
+  assert.match(second.output, /already using/);
+
+  // A stand-in for api.github.com that knows no repos, as GitHub answers for a private repo without a token.
+  const http = await import('node:http');
+  const gh = http.createServer((req, res) => {
+    res.writeHead(404, { 'content-type': 'application/json' });
+    res.end('{"message":"Not Found"}');
+  });
+  await new Promise((r) => gh.listen(0, '127.0.0.1', r));
+
+  const owner = new Browser();
+  const r = await owner.post('/api/rooms', { name: 'Private room', repo: 'someone/secret-project', yourName: 'Ana', ownerPassword: 'owner-pass', roomPassword: 'room-pass' });
+  assert.equal(r.status, 200);
+  const host = start(['cli/gitclaudehub.js', 'host', '--hub', BASE, '--room', r.data.id, '--key', r.data.hostKey], 'private host', {
+    GITHUB_API_URL: `http://127.0.0.1:${gh.address().port}`,
+  });
+  assert.equal(await host.exited, 1);
+  gh.close();
+  assert.match(host.output, /someone\/secret-project is private/);
+  assert.match(host.output, /gitclaudehub host --room \S+ --token/);
+  assert.ok(!fs.existsSync(path.join(tmp, 'home', 'rooms', r.data.id, 'repo')), 'nothing was cloned');
 });

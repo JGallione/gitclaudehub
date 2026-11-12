@@ -72,7 +72,15 @@ Set `CREATE_ROOM_CODE` if only people with a code should be able to create rooms
    gitclaudehub host --hub https://your-site --room <id> --ollama qwen3:8b   # a local model
    ```
 
-   It asks for the host key once and remembers it (and your other choices) in `~/.gitclaudehub/hosts/`. It clones the repo into `~/.gitclaudehub/rooms/<id>/repo` with git's own credentials, or with `GITHUB_TOKEN` for private repos over https. Later, `gitclaudehub host --room <id>` is enough, and `gitclaudehub host --all` hosts every room you've hosted. Run `gitclaudehub --help` for every option (`--approvals`, `--budget`, `--preview <dir>`, `--model`, `--dir`).
+   It asks for the host key once and remembers it (and your other choices) in `~/.gitclaudehub/hosts/`. It clones the repo into `~/.gitclaudehub/rooms/<id>/repo`. Later, `gitclaudehub host --room <id>` is enough, and `gitclaudehub host --all` hosts every room you've hosted. Run `gitclaudehub --help` for every option (`--approvals`, `--budget`, `--preview <dir>`, `--model`, `--dir`).
+
+   **Private repos** need a GitHub personal access token on the host's computer. Add `--token` and paste it when asked:
+
+   ```bash
+   gitclaudehub host --hub https://your-site --room <id> --token
+   ```
+
+   Make a fine-grained token at github.com → Settings → Developer settings → Fine-grained tokens. Under Repository access, choose "Only select repositories" and pick the room's repo. Under Permissions, set Contents to "Read and write". The token is saved for that room only, in `~/.gitclaudehub/hosts/<id>.json` (readable only by you), and the site never sees it. Before cloning, the host checks with GitHub that the token can read and push the repo, and says exactly what's wrong if it can't. In a terminal, it asks for a token on the spot. `--forget-token` removes a saved token. Without one, the host uses `GITHUB_TOKEN` if it's set, then git's own credentials.
 
 4. Send friends the invite link and the room password.
 

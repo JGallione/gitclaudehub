@@ -139,6 +139,13 @@ function installHint() {
   ];
 }
 
+function tokenHint() {
+  return el('p', { class: 'hint' },
+    'Private repo? Add ', el('code', { text: '--token' }),
+    ' and paste a GitHub personal access token when it asks: fine-grained, only this repo, Contents "Read and write". It stays on your computer; this site never sees it.'
+  );
+}
+
 const inviteLink = (invite) => `${location.origin}/r/${route.roomId}#invite=${invite}`;
 const ownerLink = (key) => `${location.origin}/r/${route.roomId}/own#key=${key}`;
 const hostCommand = (extra = '') => `gitclaudehub host --hub ${location.origin} --room ${route.roomId}${extra}`;
@@ -220,6 +227,7 @@ function showCreated(r) {
       el('p', { text: 'Turns run on the computer where you run this, using its Claude login (or ANTHROPIC_API_KEY if set). Paste the host key when it asks.' }),
       installHint(),
       copyBlock(hostCommand()),
+      tokenHint(),
       copyField('Host key', r.hostKey),
       el('p', { class: 'hint', text: 'To use a local model instead, add --ollama and a model name, for example --ollama qwen3:8b (needs Ollama 0.14.3 or newer).' })
     ),
@@ -935,6 +943,7 @@ async function openSettings() {
       el('p', { class: 'hint', text: 'Run this on the computer that should do the work. It needs the gitclaudehub command and git access to the repo, and asks for the host key the first time.' }),
       installHint(),
       copyBlock(hostCommand()),
+      tokenHint(),
       el('p', { class: 'hint', text: 'With a local model instead (Ollama 0.14.3 or newer):' }),
       copyBlock(hostCommand(' --ollama qwen3:8b')),
       el('div', { class: 'row' }, el('button', { class: 'btn btn-sm', type: 'button', text: 'Make a new host key', onclick: resetHostKey }))

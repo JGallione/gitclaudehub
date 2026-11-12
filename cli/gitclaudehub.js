@@ -67,7 +67,10 @@ ${c.bold('Host options')} (remembered per room in ~/.gitclaudehub/hosts/)
   --preview <dir>     Serve this folder of the repo in the room's Preview tab ("." for plain HTML)
   --dir <path>        Where the room's clone lives (default ~/.gitclaudehub/rooms/<id>/repo)
   --context <tokens>  The local model's context window, to warn before a session outgrows it (32768)
-  Private repos over https use GITHUB_TOKEN if it's set; otherwise git's own credentials.
+  --token             Paste a GitHub personal access token for this room's repo (needed for private
+                      repos). It's saved for this room only, on this computer, and never sent to the site.
+  --forget-token      Remove this room's saved token
+  Without a saved token, the host uses GITHUB_TOKEN if it's set, then git's own credentials.
 `;
 
 function fail(msg) {
@@ -250,6 +253,7 @@ async function cmdHost(opts) {
   loadEnv(); // GITHUB_TOKEN and friends, when run from the app's own folder
   let configs;
   if (opts.all) {
+    if (opts.token || opts['forget-token']) fail('Set a token for one room at a time: gitclaudehub host --room <id> --token');
     configs = savedHosts().filter((cfg) => !opts.hub || sameHub(cfg.hub, opts.hub));
     if (!configs.length) fail(`No rooms to host yet. Run ${c.bold('gitclaudehub host --hub <site> --room <id>')} once first.`);
   } else {
@@ -266,6 +270,12 @@ async function cmdHost(opts) {
     if (opts.context !== undefined) cfg.context = Number(opts.context);
     if (opts.claude) delete cfg.ollama;
     if (opts['no-preview']) delete cfg.preview;
+    if (opts['forget-token']) delete cfg.githubToken;
+    if (opts.token) {
+      if (!process.stdin.isTTY) fail('--token asks for the token in the terminal. Without one, set GITHUB_TOKEN instead.');
+      cfg.githubToken = await askHidden('Paste a GitHub personal access token for this room’s repo (it stays on this computer): ');
+      if (!cfg.githubToken) fail('No token entered.');
+    }
     if (cfg.dir) cfg.dir = path.resolve(cfg.dir);
     if (opts.key || process.env.GITCLAUDEHUB_HOST_KEY) cfg.key = opts.key || process.env.GITCLAUDEHUB_HOST_KEY;
     if (!cfg.hub) fail('Pass --hub <the site address>, for example --hub https://something.trycloudflare.com');
@@ -277,7 +287,6 @@ async function cmdHost(opts) {
   }
 
   const { hostRoom } = await import('../host/host.js');
-  const token = process.env.GITHUB_TOKEN || '';
   const single = configs.length === 1;
   const running = new Map();
 
@@ -289,6 +298,8 @@ async function cmdHost(opts) {
         cfg.key = await askHidden('Paste the host key from the room settings: ');
         if (!cfg.key) return log(c.red('✖ ') + 'No host key. Pass --key <key> or set GITCLAUDEHUB_HOST_KEY.');
       }
+      // This room's own token first, then GITHUB_TOKEN, then git's own credentials (no token).
+      const token = cfg.githubToken || process.env.GITHUB_TOKEN || '';
       let h;
       try {
         h = await hostRoom({ ...cfg, token }, { log, onReady: () => saveHost(cfg) });
@@ -306,6 +317,18 @@ async function cmdHost(opts) {
         log(c.yellow('! ') + `${r.reason} Paste the current host key (room settings → Reset host key gives you a new one).`);
         cfg.key = '';
         continue;
+      }
+      if (r.code === 'needs_token') {
+        log(c.yellow('! ') + r.reason);
+        if (single && process.stdin.isTTY) {
+          const t = await askHidden('Paste a GitHub personal access token for this room’s repo (Enter to stop): ');
+          if (t) {
+            cfg.githubToken = t;
+            continue;
+          }
+        } else log(`Then run: gitclaudehub host --room ${cfg.roomId} --token`);
+        process.exitCode = 1;
+        return;
       }
       if (r.code === 'gone' || r.code === 'deleted') forgetHost(cfg.roomId);
       if (!r.ok) process.exitCode = 1;
@@ -350,6 +373,8 @@ const { values, positionals } = parseArgs({
     'no-preview': { type: 'boolean' },
     context: { type: 'string' },
     'repo-url': { type: 'string' },
+    token: { type: 'boolean' },
+    'forget-token': { type: 'boolean' },
   },
 });
 

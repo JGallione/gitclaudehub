@@ -765,6 +765,36 @@ function startPreviewServer() {
 
 // ---------------------------------------------------------------------------
 
+// One site per data folder. Two would each keep their own copy of the rooms in memory and
+// overwrite each other's rooms.json.
+function takeDataLock() {
+  const file = path.join(config.hubDir, 'site.pid');
+  try {
+    const pid = Number(fs.readFileSync(file, 'utf8'));
+    if (pid && pid !== process.pid) {
+      process.kill(pid, 0); // throws if that process is gone
+      console.error(`\n[gitclaudehub] Another gitclaudehub site (process ${pid}) is already using ${config.dataDir}.`);
+      console.error('[gitclaudehub] Stop that one first, or give this one its own DATA_DIR.\n');
+      process.exit(1);
+    }
+  } catch (err) {
+    if (err.code === 'EPERM') {
+      console.error(`\n[gitclaudehub] Another gitclaudehub site is already using ${config.dataDir}. Stop it first.\n`);
+      process.exit(1);
+    }
+    // No lock, or a stale one from a site that has stopped.
+  }
+  fs.writeFileSync(file, String(process.pid), { mode: 0o600 });
+  const release = () => {
+    try {
+      if (fs.readFileSync(file, 'utf8') === String(process.pid)) fs.rmSync(file);
+    } catch {}
+  };
+  process.on('exit', release);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => process.exit(0));
+}
+
+takeDataLock();
 migrateLegacyRoom(store, config);
 startPreviewServer();
 server.listen(config.port, config.host, () => {
