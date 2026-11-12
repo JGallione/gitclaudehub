@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gitclaudehub</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c2552d'/%3E%3Ccircle cx='11' cy='16' r='4' fill='white'/%3E%3Ccircle cx='21' cy='16' r='4' fill='white' opacity='.7'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/vendor/marked.js" defer></script>
+  <script src="/vendor/purify.js" defer></script>
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <!-- Lobby: your rooms, and a form to make one -->
+  <main id="lobby" class="lobby" hidden>
+    <div class="lobby-inner">
+      <div class="brand brand-lg"><span class="logo" aria-hidden="true"></span>gitclaudehub</div>
+      <p class="lobby-lede">Build a project with friends and an AI. Make a room for your GitHub repo, run its AI on your own computer (your Claude login, an API key, or a local Ollama model), and invite people in.</p>
+
+      <section id="my-rooms-section" class="lobby-section" hidden>
+        <h2 class="side-heading">Your rooms</h2>
+        <ul id="my-rooms" class="room-list"></ul>
+      </section>
+
+      <form id="create-form" class="card form-card">
+        <h2>Create a room</h2>
+        <label>Room name
+          <input name="name" maxlength="80" required placeholder="What you're building" />
+        </label>
+        <label>GitHub repo
+          <input name="repo" placeholder="owner/name" autocomplete="off" spellcheck="false" />
+          <span class="hint">The project the room builds. Your computer clones it and pushes each turn with your own git access.</span>
+        </label>
+        <label>Your name
+          <input name="yourName" maxlength="32" required autocomplete="nickname" placeholder="How friends will see you" />
+        </label>
+        <div class="two">
+          <label>Owner password
+            <input name="ownerPassword" type="password" minlength="6" required autocomplete="new-password" />
+            <span class="hint">Just for you, with your owner link.</span>
+          </label>
+          <label>Room password
+            <input name="roomPassword" type="password" minlength="6" required autocomplete="off" />
+            <span class="hint">For friends, with the invite link.</span>
+          </label>
+        </div>
+        <label id="create-code-row" hidden>Room-creation code
+          <input name="code" autocomplete="off" />
+          <span class="hint">This site asks for one. Get it from whoever runs the site.</span>
+        </label>
+        <p id="create-error" class="form-error" role="alert"></p>
+        <button class="btn btn-primary" type="submit">Create room</button>
+      </form>
+
+      <section class="card how">
+        <h2>How a room works</h2>
+        <ol>
+          <li>You create the room, so you own it.</li>
+          <li>On your computer, run the <code>gitclaudehub host</code> command the room shows you. Every turn runs there, with your AI and your git access. This site never sees your keys.</li>
+          <li>Send friends the invite link and the room password. Everyone watches each turn live, approves commands, and every turn is committed to your repo.</li>
+          <li>As the owner you can lock the room, approve commands yourself, remove people, and delete the room.</li>
+        </ol>
+        <p id="install-line" class="hint install-line" hidden></p>
+      </section>
+    </div>
+  </main>
+
+  <!-- Join with an invite link, or sign in as the owner -->
+  <main id="join" class="join" hidden>
+    <form id="join-form" class="join-card">
+      <a href="/" class="brand brand-lg"><span class="logo" aria-hidden="true"></span>gitclaudehub</a>
+      <h1 id="join-title" class="join-room"></h1>
+      <p id="join-lede" class="join-lede"></p>
+      <div id="join-fields">
+        <label>Your name
+          <input id="join-name" name="name" autocomplete="nickname" maxlength="32" required placeholder="How friends will see you" />
+        </label>
+        <label><span id="join-password-label">Room password</span>
+          <input id="join-password" name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <label id="join-password2-row" hidden>Type it again
+          <input id="join-password2" name="password2" type="password" autocomplete="new-password" />
+        </label>
+        <p id="join-error" class="form-error" role="alert"></p>
+        <button id="join-submit" class="btn btn-primary btn-block" type="submit">Join the room</button>
+      </div>
+      <a href="/" class="link-btn join-back">All rooms</a>
+    </form>
+  </main>
+
+  <!-- A room -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <button id="toggle-sidebar" class="icon-btn only-narrow" aria-label="Show sessions">☰</button>
+      <a href="/" class="brand" title="All your rooms"><span class="logo" aria-hidden="true"></span><span class="only-wide">gitclaudehub</span></a>
+      <span class="crumb" aria-hidden="true">/</span>
+      <strong id="room-name" class="room-name"></strong>
+      <a id="repo-link" class="repo-link" target="_blank" rel="noopener" hidden></a>
+      <span id="host-chip" class="chip"></span>
+      <div class="spacer"></div>
+      <div id="online" class="online" aria-label="People in the room"></div>
+      <button id="open-settings" class="btn btn-ghost" hidden>Settings</button>
+      <button id="toggle-panel" class="btn btn-ghost">Project</button>
+      <div class="me">
+        <span id="me-name"></span>
+        <button id="leave" class="link-btn">Leave</button>
+      </div>
+    </header>
+
+    <aside id="sidebar" class="sidebar">
+      <button id="new-session" class="btn btn-primary btn-block">New session</button>
+      <h2 class="side-heading">Shared sessions</h2>
+      <ul id="session-list" class="session-list"></ul>
+      <p id="no-sessions" class="side-empty" hidden>Nothing shared yet. Start a new session, or run <code>gitclaudehub push</code> in your project to share one from your terminal.</p>
+    </aside>
+
+    <section class="chat">
+      <div class="chat-head">
+        <div class="chat-title-wrap">
+          <h1 id="chat-title">New session</h1>
+          <p id="chat-sub" class="chat-sub"></p>
+        </div>
+        <button id="resume-hint" class="btn btn-ghost btn-sm" hidden>Continue in terminal</button>
+      </div>
+      <div id="resume-box" class="resume-box" hidden>
+        <p>In your own clone of the repo, run:</p>
+        <pre><code id="resume-cmd"></code></pre>
+        <button id="copy-resume" class="btn btn-sm">Copy</button>
+      </div>
+      <div id="room-banner" class="room-banner" hidden></div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <div id="permissions" class="permissions"></div>
+      <footer class="composer-wrap">
+        <div id="activity" class="activity" hidden>
+          <span class="pulse" aria-hidden="true"></span>
+          <span id="activity-text"></span>
+          <button id="stop" class="link-btn danger">Stop</button>
+        </div>
+        <ul id="queue" class="queue"></ul>
+        <form id="composer" class="composer">
+          <textarea id="prompt" rows="1" placeholder="Ask Claude to build something…" aria-label="Message"></textarea>
+          <button id="send" class="btn btn-primary" type="submit">Send</button>
+        </form>
+        <p class="composer-hint">Enter sends · Shift+Enter for a new line · everyone in the room sees each turn live</p>
+      </footer>
+    </section>
+
+    <aside id="panel" class="panel">
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="files" class="tab active">Files</button>
+        <button role="tab" data-tab="changes" class="tab">Changes</button>
+        <button role="tab" data-tab="preview" class="tab" id="preview-tab" hidden>Preview</button>
+        <button id="close-panel" class="icon-btn" aria-label="Close project panel">✕</button>
+      </nav>
+      <div class="tab-body" data-body="files">
+        <input id="file-filter" class="filter" placeholder="Filter files" />
+        <ul id="file-list" class="file-list"></ul>
+      </div>
+      <div class="tab-body" data-body="changes" hidden>
+        <ul id="commit-list" class="commit-list"></ul>
+      </div>
+      <div class="tab-body" data-body="preview" hidden>
+        <div class="preview-bar"><a id="preview-open" target="_blank" rel="noopener">Open in a new tab ↗</a><button id="reload-preview" class="link-btn">Reload</button></div>
+        <iframe id="preview-frame" title="Project preview"></iframe>
+      </div>
+    </aside>
+  </div>
+
+  <!-- File and diff viewer -->
+  <dialog id="viewer" class="viewer">
+    <div class="viewer-head">
+      <strong id="viewer-title"></strong>
+      <a id="viewer-gh" target="_blank" rel="noopener" hidden>View on GitHub ↗</a>
+      <button class="icon-btn" id="viewer-close" aria-label="Close">✕</button>
+    </div>
+    <pre id="viewer-body" class="viewer-body"></pre>
+  </dialog>
+
+  <!-- Settings, new links and keys -->
+  <dialog id="sheet" class="sheet">
+    <div class="sheet-head">
+      <strong id="sheet-title"></strong>
+      <button class="icon-btn" id="sheet-close" aria-label="Close">✕</button>
+    </div>
+    <div id="sheet-body" class="sheet-body"></div>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>

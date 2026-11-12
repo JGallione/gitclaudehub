@@ -1,0 +1,30 @@
+{
+  "name": "gitclaudehub",
+  "version": "0.1.0",
+  "description": "Share a Claude Code session and its project through a GitHub repo, and keep building it together from a web app.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JGallione/gitclaudehub.git"
+  },
+  "homepage": "https://github.com/JGallione/gitclaudehub#readme",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "bin": {
+    "gitclaudehub": "cli/gitclaudehub.js"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.312",
+    "dompurify": "3.4.17",
+    "express": "5.1.0",
+    "marked": "18.1.1",
+    "ws": "8.22.0"
+  }
+}
