@@ -169,7 +169,8 @@ export async function hostRoom(cfg, { log = console.log, onReady } = {}) {
     });
     sock.on('ping', alive);
     sock.on('message', (data) => onMessage(data.toString()));
-    sock.on('error', (err) => !stopped && attempts < 2 && log(`Connection problem: ${err.message}`));
+    // A refused connection can come back as an AggregateError with only a code and no message.
+    sock.on('error', (err) => !stopped && attempts < 2 && log(`Connection problem: ${err.message || err.code || err.errors?.[0]?.code || "the site didn't answer"}`));
     sock.on('close', (code, reason) => {
       clearTimeout(heartbeat);
       if (runner?.current) runner.interrupt('gitclaudehub (the connection to the site dropped)');
