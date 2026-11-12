@@ -45,7 +45,11 @@ echo "  Owners host with:   gitclaudehub host --hub $APP_URL --room <room id>"
 echo
 
 node server/index.js &
-echo $! >"$LOGS/site.pid"
+SITE=$!
+echo $SITE >"$LOGS/site.pid"
+# Cloudflare deletes a quick tunnel that stays disconnected for long, e.g. while a laptop sleeps.
+# Keep this computer awake while the site runs (macOS; it ends when the site does).
+command -v caffeinate >/dev/null && { caffeinate -i -s -w $SITE & echo $! >"$LOGS/caffeinate.pid"; }
 
 # Once the site answers, host this computer's rooms on it.
 for _ in $(seq 1 40); do curl -sf "http://localhost:$PORT/api/hub" >/dev/null && break; sleep 0.25; done
@@ -54,4 +58,16 @@ if ls "${GITCLAUDEHUB_HOME:-$HOME/.gitclaudehub}"/hosts/*.json >/dev/null 2>&1; 
   echo $! >"$LOGS/hosts.pid"
 fi
 
-wait "$(cat "$LOGS/site.pid")"
+# Run until the site stops. If Cloudflare drops the link anyway (asleep or offline too long), say so:
+# that link never comes back, and only a restart gets a new one.
+warned=
+while kill -0 $SITE 2>/dev/null; do
+  if [ -z "$warned" ] && grep -q "Tunnel not found" "$LOGS/app.log" "$LOGS/preview.log" 2>/dev/null; then
+    echo
+    echo "!! Cloudflare dropped this room's link ($APP_URL), probably because this computer was asleep"
+    echo "!! or offline too long. It won't come back. Press Ctrl-C and run ./start-room.sh again for a new link."
+    echo
+    warned=1
+  fi
+  sleep 15
+done
